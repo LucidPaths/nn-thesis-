@@ -1,27 +1,11 @@
-"""
-Cycle selection and LoRA promotion module.
-
-After each fine-tuning cycle, compares the cycle's best NN accuracy against
-the previous cycle's baseline. On a positive delta, permanently merges the
-cycle's LoRA adapter into the base LLM weights via MergeLLM.merge().
-"""
+"""Core selection logic: compare cycle accuracy against baseline, merge on positive delta."""
 
 import json
 from pathlib import Path
-from dataclasses import dataclass, asdict
 from typing import Optional
 
-
-@dataclass
-class SelectionResult:
-    """Outcome of a single cycle's promotion decision."""
-    cycle: int
-    best_accuracy: Optional[float]
-    baseline_accuracy: Optional[float]
-    promoted: bool
-    delta: Optional[float]
-    adapter_path: Optional[str]
-    merged_path: Optional[str] = None
+from selection.result import SelectionResult
+from selection.history import append_history
 
 
 def load_cycle_results(cycle_results_path: Path) -> dict:
@@ -77,7 +61,7 @@ def select_and_promote(
             delta=None,
             adapter_path=str(adapter_path),
         )
-        _append_history(result, history_path)
+        append_history(result, history_path)
         return result
 
     if baseline_accuracy is None:
@@ -111,19 +95,5 @@ def select_and_promote(
             adapter_path=str(adapter_path),
         )
 
-    _append_history(result, history_path)
+    append_history(result, history_path)
     return result
-
-
-def _append_history(result: SelectionResult, history_path) -> None:
-    """Append a selection result to the JSON history file."""
-    if history_path is None:
-        return
-    history_path = Path(history_path)
-    history = []
-    if history_path.exists():
-        with open(history_path) as f:
-            history = json.load(f)
-    history.append(asdict(result))
-    with open(history_path, "w") as f:
-        json.dump(history, f, indent=2)
