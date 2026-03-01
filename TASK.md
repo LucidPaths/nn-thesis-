@@ -104,3 +104,9 @@ TASK.md        — This file
 3. **Design the selection module** as a new file (e.g., `selection.py` or `tracker.py`) that can be imported by the existing scripts
 4. **Show where and how it hooks into the existing pipeline** — provide the specific integration points (which functions to call, where in the loop)
 5. **Write tests** that validate the tracking/comparison/promotion logic independently of GPU training
+
+## Parent Repos (reference only, do not clone)
+- https://github.com/ABrain-One/nn-gpt — full pipeline repo, these src files are extracted from `ab/gpt/`
+- https://github.com/ABrain-One/nn-dataset — LEMUR dataset, the `ab.nn.api` module contains `data()` and `check_nn()`
+
+Fetch specific files from these repos as needed for import signatures or API details.
