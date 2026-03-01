@@ -5,7 +5,7 @@ import time
 from ab.nn.util.Util import release_memory, uuid4
 from ab.gpt.util.Util import read_py_file_as_string
 
-from ab.gpt.util.Const import epoch_dir, new_nn_file, nngpt_dir, synth_dir, hp_file, NN_TRAIN_EPOCHS
+from ab.gpt.util.Const import epoch_dir, new_nn_file, nngpt_dir, synth_dir, hp_file, NN_TRAIN_EPOCHS, base_llm
 from ab.gpt.util.Eval import Eval
 from ab.gpt.util.Util import verify_nn_code, copy_to_lemur
 from ab.gpt.util.CycleResults import generate_cycle_results, collect_cycle_metrics, save_cycle_results
@@ -34,7 +34,8 @@ CYCLE = None  # Cycle number (separate from epoch - cycle is the finetuning iter
 
 def main(nn_name_prefix=NN_NAME_PREFIX, nn_train_epochs=NN_TRAIN_EPOCHS, only_epoch=ONLY_EPOCH, save_to_db=SAVE_TO_DB,
          nn_alter_epochs=NN_ALTER_EPOCHS, task=TASK, dataset=DATASET, metric=METRIC, lr=LR, batch=BATCH, dropout=DROPOUT, momentum=MOMENTUM,
-         transform=TRANSFORM, epoch_limit_minutes=EPOCH_LIMIT_MINUTES, custom_synth_dir=CUSTOM_SYNTH_DIR, cycle=CYCLE):
+         transform=TRANSFORM, epoch_limit_minutes=EPOCH_LIMIT_MINUTES, custom_synth_dir=CUSTOM_SYNTH_DIR, cycle=CYCLE,
+         base_model_path=None, merged_output_path=None):
     base_nngpt_path = nngpt_dir  # out/nngpt
     if nn_alter_epochs is None:
         if epoch_dir().is_dir():
@@ -42,6 +43,8 @@ def main(nn_name_prefix=NN_NAME_PREFIX, nn_train_epochs=NN_TRAIN_EPOCHS, only_ep
         else:
             print()
             print(f"Directory {epoch_dir()} doesn't exist", file=sys.stderr)
+
+    prev_best_accuracy = None  # Baseline for selection: previous cycle's best
 
     if nn_alter_epochs:
         for i in ([only_epoch] if only_epoch is not None else range(nn_alter_epochs)):
@@ -220,6 +223,25 @@ def main(nn_name_prefix=NN_NAME_PREFIX, nn_train_epochs=NN_TRAIN_EPOCHS, only_ep
             print(f"\n--- Cycle {current_cycle} (Epoch {current_epoch}) results saved to: {cycle_results_path} ---")
             print(f"  Found {len(eval_results_list)} successful evaluations from eval_info.json files")
             print(f"  Found {len(failed_models)} failed models")
+
+            # --- Selection: decide whether to promote this cycle's LoRA adapter ---
+            adapter_path = current_alter_epoch_path / base_llm
+            if adapter_path.exists() and base_model_path and merged_output_path:
+                from selection import select_and_promote
+                history_path = base_nngpt_path / "selection_history.json"
+                sel_result = select_and_promote(
+                    cycle_results_path=cycle_results_path,
+                    adapter_path=adapter_path,
+                    base_model_path=base_model_path,
+                    merged_output_path=merged_output_path,
+                    baseline_accuracy=prev_best_accuracy,
+                    history_path=history_path,
+                )
+                if sel_result.promoted:
+                    prev_best_accuracy = sel_result.best_accuracy
+                    print(f"  [SELECTION] Cycle {current_cycle} PROMOTED (delta={sel_result.delta}). LoRA merged into base.")
+                else:
+                    print(f"  [SELECTION] Cycle {current_cycle} REJECTED (delta={sel_result.delta}). Base model unchanged.")
 
 
 if __name__ == "__main__":
