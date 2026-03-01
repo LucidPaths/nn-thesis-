@@ -35,7 +35,7 @@ CYCLE = None  # Cycle number (separate from epoch - cycle is the finetuning iter
 def main(nn_name_prefix=NN_NAME_PREFIX, nn_train_epochs=NN_TRAIN_EPOCHS, only_epoch=ONLY_EPOCH, save_to_db=SAVE_TO_DB,
          nn_alter_epochs=NN_ALTER_EPOCHS, task=TASK, dataset=DATASET, metric=METRIC, lr=LR, batch=BATCH, dropout=DROPOUT, momentum=MOMENTUM,
          transform=TRANSFORM, epoch_limit_minutes=EPOCH_LIMIT_MINUTES, custom_synth_dir=CUSTOM_SYNTH_DIR, cycle=CYCLE,
-         merged_output_path=None):
+         base_model_path=None, merged_output_path=None):
     base_nngpt_path = nngpt_dir  # out/nngpt
     if nn_alter_epochs is None:
         if epoch_dir().is_dir():
@@ -226,19 +226,22 @@ def main(nn_name_prefix=NN_NAME_PREFIX, nn_train_epochs=NN_TRAIN_EPOCHS, only_ep
 
             # --- Selection: decide whether to promote this cycle's LoRA adapter ---
             adapter_path = current_alter_epoch_path / base_llm
-            if adapter_path.exists() and merged_output_path:
+            if adapter_path.exists() and base_model_path and merged_output_path:
                 from selection import select_and_promote
+                history_path = base_nngpt_path / "selection_history.json"
                 sel_result = select_and_promote(
                     cycle_results_path=cycle_results_path,
                     adapter_path=adapter_path,
+                    base_model_path=base_model_path,
                     merged_output_path=merged_output_path,
                     baseline_accuracy=prev_best_accuracy,
+                    history_path=history_path,
                 )
-                if sel_result["promoted"]:
-                    prev_best_accuracy = sel_result["best_accuracy"]
-                    print(f"  [SELECTION] Cycle {current_cycle} PROMOTED (delta={sel_result['delta']}). LoRA merged into base.")
+                if sel_result.promoted:
+                    prev_best_accuracy = sel_result.best_accuracy
+                    print(f"  [SELECTION] Cycle {current_cycle} PROMOTED (delta={sel_result.delta}). LoRA merged into base.")
                 else:
-                    print(f"  [SELECTION] Cycle {current_cycle} REJECTED (delta={sel_result['delta']}). Base model unchanged.")
+                    print(f"  [SELECTION] Cycle {current_cycle} REJECTED (delta={sel_result.delta}). Base model unchanged.")
 
 
 if __name__ == "__main__":
